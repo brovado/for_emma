@@ -19,21 +19,26 @@ const fctx=fx.getContext('2d');
 let pictureIndex=0;
 let finished=false;
 let celebrationTimer=null;
+let pictureLoadTimer=null;
 let lastSpark=0;
 let grid=[];
 const COLS=24;
 const ROWS=16;
 const revealRadius=92;
 
+function resetRevealState(){
+  // Every picture gets its own completely fresh win condition.
+  grid=Array.from({length:COLS*ROWS},()=>false);
+  finished=false;
+  progress.style.width='0%';
+  progressText.textContent='0% revealed';
+}
+
 function resize(){
   fog.width=fx.width=window.innerWidth;
   fog.height=fx.height=window.innerHeight;
-  makeGrid();
+  resetRevealState();
   cover();
-}
-
-function makeGrid(){
-  grid=Array.from({length:COLS*ROWS},()=>false);
 }
 
 function cover(){
@@ -45,23 +50,34 @@ function cover(){
 }
 
 function loadPicture(){
-  finished=false;
   clearTimeout(celebrationTimer);
+  clearTimeout(pictureLoadTimer);
+
+  // Reset BEFORE the next picture becomes playable. This prevents the
+  // previous picture's revealed cells from satisfying the new win condition.
+  resetRevealState();
+  cover();
+
   bg.style.opacity='0';
-  setTimeout(()=>{
+  pictureLoadTimer=setTimeout(()=>{
     bg.style.backgroundImage=`url("${pictures[pictureIndex].src}")`;
     bg.style.transform='scale(1.02)';
+    resetRevealState();
     cover();
     bg.style.opacity='1';
   },180);
+
   hint.textContent='Move the magnifying glass to reveal the magic!';
 }
 
 function markGrid(x,y){
+  if(finished)return;
+
   const cellW=window.innerWidth/COLS;
   const cellH=window.innerHeight/ROWS;
   const r=Math.ceil(revealRadius/Math.min(cellW,cellH));
   const cx=Math.floor(x/cellW), cy=Math.floor(y/cellH);
+
   for(let gy=Math.max(0,cy-r);gy<=Math.min(ROWS-1,cy+r);gy++){
     for(let gx=Math.max(0,cx-r);gx<=Math.min(COLS-1,cx+r);gx++){
       const dx=(gx+.5)*cellW-x;
@@ -69,10 +85,12 @@ function markGrid(x,y){
       if(Math.hypot(dx,dy)<=revealRadius) grid[gy*COLS+gx]=true;
     }
   }
+
   const revealed=grid.reduce((n,v)=>n+(v?1:0),0)/(COLS*ROWS);
   const pct=Math.floor(revealed*100);
   progress.style.width=pct+'%';
   progressText.textContent=pct+'% revealed';
+
   if(revealed>=.92) celebrate();
 }
 
@@ -113,9 +131,19 @@ function fireworks(){
   let frame=0;
   function animate(){
     fctx.clearRect(0,0,fx.width,fx.height);
-    particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=.055;p.vx*=.992;p.life-=.018;fctx.globalAlpha=Math.max(0,p.life);fctx.font=p.size*5+'px sans-serif';fctx.fillText(p.emoji,p.x,p.y)});
+    particles.forEach(p=>{
+      p.x+=p.vx;
+      p.y+=p.vy;
+      p.vy+=.055;
+      p.vx*=.992;
+      p.life-=.018;
+      fctx.globalAlpha=Math.max(0,p.life);
+      fctx.font=p.size*5+'px sans-serif';
+      fctx.fillText(p.emoji,p.x,p.y);
+    });
     fctx.globalAlpha=1;
-    if(frame++<90) requestAnimationFrame(animate); else fctx.clearRect(0,0,fx.width,fx.height);
+    if(frame++<90) requestAnimationFrame(animate);
+    else fctx.clearRect(0,0,fx.width,fx.height);
   }
   animate();
 }
@@ -127,10 +155,12 @@ function celebrate(){
   progress.style.width='100%';
   progressText.textContent='Magic complete!';
   fireworks();
+
   const celebration=document.createElement('div');
   celebration.className='celebrate';
   celebration.innerHTML=`<div class="celebrate-card">🎉 Amazing, Emma! 🎉<small>You found ${pictures[pictureIndex].name}! ✨</small></div>`;
   game.appendChild(celebration);
+
   celebrationTimer=setTimeout(()=>{
     celebration.remove();
     pictureIndex=(pictureIndex+1)%pictures.length;
@@ -151,6 +181,7 @@ document.addEventListener('touchmove',e=>{
   const t=e.touches[0];
   move(t.clientX,t.clientY);
 },{passive:true});
+
 window.addEventListener('resize',resize);
 resize();
 loadPicture();
